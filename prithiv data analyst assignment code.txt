@@ -1,0 +1,188 @@
+#Assignment
+#SETTING WORKING DIRECTORY
+import os
+path = os.getcwd()
+print("current working directory:",path)
+
+os.chdir('C:\\Users\\prith\\Desktop\\Cleaning of Data & Merging into single excel')
+print(os.getcwd())
+
+
+import pandas as pd
+import os
+from glob import glob
+
+# Paths
+annexure_dir = r"C:\Users\prith\Desktop\Cleaning of Data & Merging into single excel\Payout Summary & Order Level Sales"
+output_file = r"C:\Users\prith\Desktop\Cleaning of Data & Merging into single excel\Data Analyst Quick Assignment.xlsx"
+
+# List of files
+excel_files = glob(os.path.join(annexure_dir, "invoice_Annexure_*.xlsx"))
+
+# Standardized structure for Summary Tab
+summary_rows = []
+
+for file in excel_files:
+    try:
+        xl = pd.ExcelFile(file)
+        file_name = os.path.basename(file)
+
+        # Find the summary sheet (case-insensitive match)
+        summary_sheet = [s for s in xl.sheet_names if 'summary' in s.lower()]
+        if not summary_sheet:
+            continue
+
+        df = xl.parse(summary_sheet[0])
+        df.columns = [str(col).strip() for col in df.columns]
+
+        # Handle single-row summary tab
+        row = {
+            "Brand": df.at[0, "Brand"] if "Brand" in df.columns else "",
+            "Location": df.at[0, "Location"] if "Location" in df.columns else "",
+            "City": df.at[0, "City"] if "City" in df.columns else "",
+            "Res-Id": df.at[0, "Res ID"] if "Res ID" in df.columns else "",
+            "Payout Period": df.at[0, "Payout Period"] if "Payout Period" in df.columns else "",
+            "Payout Settlement Date": df.at[0, "Payout Settlement Date"] if "Payout Settlement Date" in df.columns else "",
+            "Total Payout": df.at[0, "Total Payout"] if "Total Payout" in df.columns else "",
+            "Total Orders (Delivered + Cancelled)": df.at[0, "Total Orders (Delivered + Cancelled)"] if "Total Orders (Delivered + Cancelled)" in df.columns else "",
+            "Bank UTR": df.at[0, "Bank UTR"] if "Bank UTR" in df.columns else "",
+            "File Name": file_name
+        }
+
+        summary_rows.append(row)
+
+    except Exception as e:
+        print(f"❌ Error reading {file}: {e}")
+
+# Combine into one DataFrame
+summary_df = pd.DataFrame(summary_rows)
+
+# ✅ Write directly into the existing file, replacing only the Summary Tab
+with pd.ExcelWriter(output_file, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+    summary_df.to_excel(writer, sheet_name="Summary Tab", index=False)
+
+print("✅ Summary Tab updated successfully in:", output_file)
+
+pip install pdfplumber
+
+#CODE FOR PDF TO EXCEL
+import pdfplumber
+import os
+from glob import glob
+import pandas as pd
+
+# Define the input folder with PDFs and the output directory for Excel files
+pdf_dir = r"C:\Users\prith\Desktop\Cleaning of Data & Merging into single excel\Commission Invoices"
+output_dir = pdf_dir  # Saves the Excel files in the same folder
+
+# Get all PDF files from the directory
+pdf_files = glob(os.path.join(pdf_dir, "*.pdf"))
+
+for pdf_file in pdf_files:
+    tables_combined = []
+    pdf_name = os.path.splitext(os.path.basename(pdf_file))[0]
+    
+    with pdfplumber.open(pdf_file) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            try:
+                tables = page.extract_tables()
+                for table in tables:
+                    # Convert to DataFrame safely
+                    df = pd.DataFrame(table)
+                    df = df.dropna(how='all')  # Drop rows that are completely empty
+                    if not df.empty:
+                        df.columns = [f"Column_{i}" for i in range(df.shape[1])]  # Rename to avoid duplicate column issues
+                        tables_combined.append(df)
+            except Exception as e:
+                print(f"⚠️ Error on page {page_num+1} of {pdf_name}: {e}")
+
+    if tables_combined:
+        final_df = pd.concat(tables_combined, ignore_index=True)
+        output_path = os.path.join(output_dir, f"{pdf_name}.xlsx")
+        final_df.to_excel(output_path, index=False)
+        print(f"✅ Converted: {pdf_name}.pdf -> {pdf_name}.xlsx")
+    else:
+        print(f"⚠️ No usable tables found in: {pdf_name}.pdf")
+
+print("✅ All files processed.")
+
+
+
+# Import necessary libraries
+import pdfplumber
+import os
+from glob import glob
+import pandas as pd
+import re
+
+# Define the directory containing PDF invoices
+pdf_dir = r"C:\Users\prith\Desktop\Cleaning of Data & Merging into single excel\Commission Invoices"
+
+# Define output Excel file path
+output_file = r"C:\Users\prith\Desktop\Cleaning of Data & Merging into single excel\Data Analyst Quick Assignment.xlsx"
+
+# Get a list of all PDF files in the directory
+pdf_files = glob(os.path.join(pdf_dir, "*.pdf"))
+
+# Initialize a list to store extracted records
+records = []
+
+# Loop through each PDF file
+for pdf_file in pdf_files:
+    # Open the PDF using pdfplumber
+    with pdfplumber.open(pdf_file) as pdf:
+        full_text = ""
+        # Extract text from each page
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                full_text += page_text + "\n"
+
+    # Helper function to extract value using regex
+    def extract_value(pattern):
+        match = re.search(pattern, full_text)
+        if match:
+            return match.group(1).strip()
+        return ""
+
+    # Extract required fields
+    store_name = extract_value(r"Restaurant / Store Name\s*:\s*(.+)")
+    store_id = extract_value(r"Restaurant / Store ID\s*:\s*(\d+)")
+    invoice_number = extract_value(r"Invoice Number\s*:\s*(\S+)")
+    invoice_date = extract_value(r"Invoice Date\s*:\s*([\d\-: ]+)")
+    service_from = extract_value(r"Service Period\s*:\s*(\d{2}/\d{2}/\d{4}) to")
+    service_to = extract_value(r"Service Period\s*:\s*\d{2}/\d{2}/\d{4} to (\d{2}/\d{2}/\d{4})")
+    base_amount = extract_value(r"SubTotal\s+([\d,]+\.\d+)")
+    cgst = extract_value(r"CGST Amount\s+[\d]+[\s\S]*?([\d,]+\.\d+)")
+    sgst = extract_value(r"SGST Amount\s+[\d]+[\s\S]*?([\d,]+\.\d+)")
+    other_charges = extract_value(r"Other Charges - Reimbursement\s+of Discount\s*([\d,]+\.\d+)")
+    grand_total = extract_value(r"Grand Total\s+([\d,]+\.\d+)")
+
+    # Append data to the records list
+    records.append({
+        "Store Name": store_name,
+        "Store ID": store_id,
+        "Invoice No.": invoice_number,
+        "Invoice Date": invoice_date.split()[0] if invoice_date else "",
+        "Service From": service_from,
+        "Service To": service_to,
+        "Base Amount": base_amount.replace(",", "") if base_amount else "",
+        "CGST": cgst.replace(",", "") if cgst else "",
+        "SGST": sgst.replace(",", "") if sgst else "",
+        "Other Charges": other_charges.replace(",", "") if other_charges else "",
+        "Grand Total": grand_total.replace(",", "") if grand_total else "",
+        "Source File": os.path.basename(pdf_file)
+    })
+
+# Convert list of records to DataFrame
+df = pd.DataFrame(records)
+
+# Write the DataFrame to Excel (append mode, replace sheet if it exists)
+with pd.ExcelWriter(output_file, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+    df.to_excel(writer, sheet_name="Commission Invoice", index=False)
+
+# Confirmation message
+print("✅ Commission invoice extraction complete.")
+
+
+
